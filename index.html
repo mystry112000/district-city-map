@@ -625,6 +625,9 @@
   const indonesiaBIG = L.tileLayer('https://geoservices.big.go.id/rbi/rest/services/BASEMAP/Rupabumi_Indonesia/MapServer/WMTS/tile/1.0.0/BASEMAP_Rupabumi_Indonesia/default/GoogleMapsCompatible/{z}/{y}/{x}.png', {
     maxZoom: 18, attribution: '&copy; BIG Indonesia',
   });
+  const sentinel2 = L.tileLayer('https://tiles.esa.maps.eox.at/wmts/1.0.0/s2cloudless-2022_3857/default/g/{z}/{y}/{x}.jpg', {
+    maxZoom: 16, attribution: '&copy; ESA Sentinel-2',
+  });
 
   // ─── State ─────────────────────────────────────────────────────────
   let map, markers = [];
@@ -662,6 +665,7 @@
       '🛰 Google Satellite (default)': googleSat,
       '🛰 Esri Satellite': satelliteMap,
       '🛰 Google Hybrid (labels)': googleHybrid,
+      '🛰 Sentinel-2 (latest, 10m)': sentinel2,
       '🗺 Street (OSM)': streetMap,
       '🌙 Dark': darkMap,
       '🇮🇳 ISRO Bhuvan (India)': bhuvanSat,
