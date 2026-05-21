@@ -9,7 +9,7 @@
 
 ![Map Preview](https://img.shields.io/badge/🗺_Live_Demo-Click_to_View-00ff41?style=for-the-badge)
 
-**➡️ [Launch Live Map](https://yourusername.github.io/district-city-map/)**
+**➡️ [Launch Live Map](https://mystry112000.github.io/district-city-map/)**
 
 ---
 
@@ -70,7 +70,7 @@
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/district-city-map.git
+git clone https://github.com/mystry112000/district-city-map.git
 
 # Open in browser — no build step needed!
 open index.html
@@ -118,7 +118,7 @@ MIT — use it freely, modify it, share it.
 ---
 
 <p align="center">
-  <sub>Made with 🖥️ by <a href="https://github.com/yourusername">yourusername</a></sub>
+  <sub>Made with 🖥️ by <a href="https://github.com/mystry112000">mystry112000</a></sub>
   <br>
   <sub>Satellite imagery © Google · Esri · ISRO · BIG</sub>
 </p>
