@@ -66,26 +66,6 @@
 
 ---
 
-## 🚀 Quick Start
-
-```bash
-# Clone the repo
-git clone https://github.com/mystry112000/district-city-map.git
-
-# Open in browser — no build step needed!
-open index.html
-```
-
-Or just serve with any static file server:
-
-```bash
-python -m http.server 8000
-# or
-npx serve .
-```
-
----
-
 ## 🛠️ Built With
 
 - **[Leaflet.js](https://leafletjs.com/)** — Lightweight interactive maps
