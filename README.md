@@ -1,11 +1,11 @@
-# 🛸 DISTRICT.CITY — Hacker Satellite Map
+# 🛸 DISTRICT.CITY — Interactive Satellite Map
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![HTML5](https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white)
 ![Leaflet](https://img.shields.io/badge/Leaflet-1.9.4-199900?logo=leaflet&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=black)
 
-> A cyberpunk-themed interactive satellite map with real-time data visualization, built with Leaflet.js. Track projects across India & Indonesia with a hacker terminal aesthetic.
+> An interactive satellite map with real-time data visualization, built with Leaflet.js. Track projects across India & Indonesia.
 
 ![Map Preview](https://img.shields.io/badge/🗺_Live_Demo-Click_to_View-00ff41?style=for-the-badge)
 
@@ -24,10 +24,7 @@
 | 📍 **GPS Locate** | Find yourself on the map |
 | 🎯 **34 Markers** | Real locations in Mumbai, Jakarta, Yogyakarta & more |
 | 🔬 **Zoom 20** | Individual buildings visible |
-| 🌀 **Matrix Rain** | Animated katakana rain overlay |
-| 📺 **CRT Scanlines** | Retro terminal aesthetic |
-| ⚡ **Glitch Text** | Animated glitch effects on title |
-| 🎵 **Sound FX** | Square-wave beep toggle |
+| 🎵 **Sound FX** | Toggle audio feedback |
 | 📊 **Live Clock** | Real-time system clock display |
 
 ---
@@ -39,7 +36,7 @@
 🛰 Esri Satellite               → zoom 20 · global backup
 🛰 Google Hybrid (labels)       → satellite + street names
 🗺 Street (OSM)                 → vector-like · instant load
-🌙 Dark                         → cyberpunk aesthetic
+🌙 Dark                         → dark mode tiles
 🇮🇳 ISRO Bhuvan (India)         → Indian satellite data
 🇮🇩 BIG Rupabumi (Indonesia)    → official Indonesia basemap
 🏷 Labels                       → overlay names on any layer
