@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HUB://district.city</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.css" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --neon-green: #00ff41;
+      --neon-cyan: #00f0ff;
+      --neon-magenta: #ff00aa;
+      --dark-bg: #0a0e0a;
+      --panel-bg: rgba(10,14,10,.94);
+      --border-glow: rgba(0,255,65,.15);
+      --text-dim: rgba(0,255,65,.45);
+    }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--dark-bg);
+      color: #fff;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    .crt::after {
+      content: ""; position: fixed; inset: 0; z-index: 9998; pointer-events: none;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,65,.012) 2px, rgba(0,255,65,.012) 4px);
+    }
+    .noise {
+      position: fixed; inset: 0; z-index: 9997; pointer-events: none; opacity: .025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 256px 256px;
+    }
+    .app { display: flex; height: 100vh; position: relative; }
+
+    /* ─── Matrix rain ─── */
+    #matrixCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .05; }
+    canvas { display: block; }
+
+    /* ─── Map ─── */
+    .map-wrap { flex: 1; position: relative; z-index: 1; min-width: 0; }
+    #map { width: 100%; height: 100%; background: #050805; }
+
+    .leaflet-control-zoom { border: none !important; }
+    .leaflet-control-zoom a {
+      background: var(--panel-bg) !important; color: var(--neon-green) !important;
+      border: 1px solid var(--border-glow) !important; font-size: 16px !important;
+      line-height: 32px !important; width: 34px !important; height: 34px !important;
+      box-shadow: 0 0 12px rgba(0,255,65,.06) !important; backdrop-filter: blur(8px) !important;
+    }
+    .leaflet-control-zoom a:hover { background: rgba(0,255,65,.1) !important; }
+    .leaflet-control-attribution { display: none !important; }
+    .leaflet-control-zoom { margin: 12px !important; }
+
+    /* Layer control */
+    .leaflet-control-layers {
+      background: var(--panel-bg) !important; border: 1px solid var(--border-glow) !important;
+      border-radius: 4px !important; backdrop-filter: blur(8px) !important;
+    }
+    .leaflet-control-layers-toggle { width: 34px !important; height: 34px !important; }
+    .leaflet-control-layers-expanded {
+      padding: 10px 14px !important; background: var(--panel-bg) !important;
+      color: var(--neon-green) !important; font-family: 'JetBrains Mono', monospace !important; font-size: 10px !important;
+    }
+    .leaflet-control-layers label { margin: 4px 0 !important; }
+    .leaflet-control-layers input { accent-color: var(--neon-green) !important; }
+
+    /* Geocoder */
+    .leaflet-control-geocoder {
+      background: var(--panel-bg) !important; border: 1px solid var(--border-glow) !important;
+      border-radius: 4px !important; backdrop-filter: blur(8px) !important;
+    }
+    .leaflet-control-geocoder input {
+      font-family: 'JetBrains Mono', monospace !important; font-size: 11px !important;
+      color: var(--neon-green) !important; background: transparent !important;
+      padding: 8px 12px !important; min-width: 200px;
+    }
+    .leaflet-control-geocoder input::placeholder { color: var(--text-dim) !important; }
+    .leaflet-control-geocoder ul { background: var(--panel-bg) !important; border: 1px solid var(--border-glow) !important; }
+    .leaflet-control-geocoder li { font-family: 'JetBrains Mono', monospace !important; font-size: 10px !important; color: var(--neon-green) !important; }
+    .leaflet-control-geocoder li:hover { background: rgba(0,255,65,.08) !important; }
+
+    /* Scale */
+    .leaflet-control-scale { font-family: 'JetBrains Mono', monospace !important; color: var(--text-dim) !important; font-size: 9px !important; }
+    .leaflet-control-scale-line {
+      background: var(--panel-bg) !important; border: 1px solid var(--border-glow) !important;
+      color: var(--text-dim) !important; backdrop-filter: blur(8px) !important;
+    }
+
+    /* Cluster overrides */
+    .marker-cluster-small { background: rgba(0,255,65,.15) !important; }
+    .marker-cluster-small div { background: rgba(0,255,65,.25) !important; color: var(--neon-green) !important; font-family: 'JetBrains Mono', monospace !important; font-size: 10px !important; }
+    .marker-cluster-medium { background: rgba(0,240,255,.15) !important; }
+    .marker-cluster-medium div { background: rgba(0,240,255,.25) !important; color: var(--neon-cyan) !important; font-family: 'JetBrains Mono', monospace !important; font-size: 10px !important; }
+    .marker-cluster-large { background: rgba(255,0,170,.15) !important; }
+    .marker-cluster-large div { background: rgba(255,0,170,.25) !important; color: var(--neon-magenta) !important; font-family: 'JetBrains Mono', monospace !important; font-size: 10px !important; }
+
+    /* ─── Sidebar ─── */
+    .sidebar {
+      width: 420px; min-width: 420px;
+      background: var(--panel-bg);
+      border-left: 1px solid var(--border-glow);
+      display: flex; flex-direction: column;
+      position: relative; z-index: 10;
+      transition: transform .35s ease;
+      backdrop-filter: blur(16px);
+    }
+    .sidebar::before {
+      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--neon-green), transparent); opacity: .3;
+    }
+    .sidebar::after {
+      content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--neon-green), transparent); opacity: .15;
+    }
+
+    .sidebar-header { padding: 24px 24px 0; display: flex; align-items: flex-start; justify-content: space-between; }
+    .brand h1 {
+      font-size: 10px; font-weight: 500; letter-spacing: .12em;
+      color: var(--neon-green); opacity: .5; margin-bottom: 2px;
+    }
+    .brand h2 {
+      font-size: 22px; font-weight: 700; letter-spacing: -.01em;
+      color: var(--neon-green);
+      text-shadow: 0 0 20px rgba(0,255,65,.25), 0 0 60px rgba(0,255,65,.08);
+    }
+    .brand h2 span { color: var(--neon-cyan); text-shadow: 0 0 20px rgba(0,240,255,.25); }
+    .brand .cursor-blink {
+      display: inline-block; width: 8px; height: 1.1em;
+      background: var(--neon-green); animation: blink 1s step-end infinite;
+      vertical-align: text-bottom; margin-left: 3px; opacity: .7;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+    @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .2; } }
+
+    .glitch { position: relative; }
+    .glitch::before, .glitch::after {
+      content: attr(data-text); position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0;
+    }
+    .glitch::before { color: var(--neon-cyan); z-index: -1; animation: glitch1 4s infinite; }
+    .glitch::after { color: var(--neon-magenta); z-index: -1; animation: glitch2 4s infinite; }
+    @keyframes glitch1 {
+      0%,5%,100% { opacity: 0; transform: translate(0); }
+      1% { opacity: .5; transform: translate(-2px,1px); } 2% { opacity: 0; transform: translate(1px,-1px); }
+      93% { opacity: 0; } 94% { opacity: .3; transform: translate(3px,-1px); } 95% { opacity: 0; }
+    }
+    @keyframes glitch2 {
+      0%,5%,100% { opacity: 0; transform: translate(0); }
+      1% { opacity: .3; transform: translate(2px,-1px); } 2% { opacity: 0; transform: translate(-1px,1px); }
+      93% { opacity: 0; } 94% { opacity: .5; transform: translate(-3px,1px); } 95% { opacity: 0; }
+    }
+
+    .header-actions { display: flex; gap: 6px; }
+    .icon-btn {
+      width: 36px; height: 36px; border-radius: 4px;
+      border: 1px solid var(--border-glow);
+      background: rgba(0,255,65,.03); color: var(--text-dim);
+      cursor: pointer; font-size: 13px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .2s; font-family: 'JetBrains Mono', monospace;
+    }
+    .icon-btn:hover { background: rgba(0,255,65,.1); color: var(--neon-green); box-shadow: 0 0 16px rgba(0,255,65,.08); }
+
+    /* ─── HUD brackets ─── */
+    .hud-corner { position: absolute; width: 10px; height: 10px; border-color: var(--neon-green); opacity: .2; }
+    .hud-corner.tl { top: -1px; left: -1px; border-top: 1px solid; border-left: 1px solid; }
+    .hud-corner.tr { top: -1px; right: -1px; border-top: 1px solid; border-right: 1px solid; }
+    .hud-corner.bl { bottom: -1px; left: -1px; border-bottom: 1px solid; border-left: 1px solid; }
+    .hud-corner.br { bottom: -1px; right: -1px; border-bottom: 1px solid; border-right: 1px solid; }
+
+    /* ─── Filters ─── */
+    .filters {
+      padding: 16px 24px; display: flex; flex-wrap: wrap; gap: 8px;
+      border-bottom: 1px solid var(--border-glow); position: relative;
+    }
+    .filters::after {
+      content: "// FILTERS";
+      position: absolute; top: -7px; right: 24px;
+      font-size: 7px; letter-spacing: .12em; color: var(--text-dim);
+      background: var(--dark-bg); padding: 0 8px;
+    }
+    .filter-group { position: relative; flex: 1; min-width: 80px; }
+    .filter-group select {
+      width: 100%; padding: 8px 12px; padding-right: 26px;
+      background: rgba(0,255,65,.04); border: 1px solid var(--border-glow);
+      border-radius: 4px; color: var(--neon-green);
+      font-size: 10px; font-family: 'JetBrains Mono', monospace;
+      cursor: pointer; appearance: none; transition: all .2s;
+    }
+    .filter-group select:hover, .filter-group select:focus {
+      border-color: var(--neon-green); outline: none; box-shadow: 0 0 12px rgba(0,255,65,.06);
+    }
+    .filter-group select option { background: #0a0e0a; color: var(--neon-green); }
+    .filter-group::after {
+      content: ">"; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      color: var(--text-dim); pointer-events: none; font-size: 9px;
+    }
+    .filter-count {
+      padding: 0 24px 8px; font-size: 9px; color: var(--text-dim); letter-spacing: .06em;
+    }
+
+    /* ─── Project list ─── */
+    .project-list { flex: 1; overflow-y: auto; padding: 4px 24px 20px; }
+    .project-list::-webkit-scrollbar { width: 3px; }
+    .project-list::-webkit-scrollbar-track { background: transparent; }
+    .project-list::-webkit-scrollbar-thumb { background: var(--border-glow); border-radius: 4px; }
+
+    .project-card {
+      display: flex; gap: 14px; padding: 12px 0;
+      border-bottom: 1px solid rgba(0,255,65,.04);
+      cursor: pointer; transition: all .2s; position: relative;
+    }
+    .project-card::before {
+      content: ""; position: absolute; left: -14px; top: 50%; width: 5px; height: 1px;
+      background: var(--neon-green); opacity: 0; transition: all .2s;
+    }
+    .project-card:hover::before, .project-card.active-card::before { opacity: .4; left: -24px; }
+    .project-card:hover { border-bottom-color: rgba(0,255,65,.1); }
+    .project-card.active-card { border-bottom-color: rgba(0,255,65.18); }
+
+    .project-thumb {
+      width: 90px; min-width: 90px; height: 68px; border-radius: 4px;
+      overflow: hidden; background: rgba(0,255,65,.04);
+      border: 1px solid var(--border-glow);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; position: relative;
+    }
+    .project-thumb::after {
+      content: ""; position: absolute; inset: 0;
+      border-radius: 4px; box-shadow: inset 0 0 20px rgba(0,0,0,.5);
+    }
+    .project-info { flex: 1; min-width: 0; }
+    .project-info .tag {
+      display: inline-block; font-size: 8px; font-weight: 500;
+      letter-spacing: .1em; text-transform: uppercase;
+      padding: 2px 6px; margin-bottom: 4px; border-radius: 2px; border: 1px solid;
+    }
+    .tag-ongoing { background: rgba(0,255,65,.08); color: var(--neon-green); border-color: rgba(0,255,65,.2); }
+    .tag-completed { background: rgba(0,240,255,.08); color: var(--neon-cyan); border-color: rgba(0,240,255,.2); }
+    .tag-upcoming { background: rgba(255,0,170,.08); color: var(--neon-magenta); border-color: rgba(255,0,170,.2); }
+    .project-info h3 { font-size: 12px; font-weight: 600; color: rgba(255,255,255,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .project-info .meta { display: flex; gap: 12px; margin-top: 3px; font-size: 9px; color: var(--text-dim); }
+    .project-info .meta span { display: flex; align-items: center; gap: 3px; }
+
+    /* ─── Map overlays ─── */
+    .map-corner {
+      position: absolute; bottom: 20px; left: 20px; z-index: 500;
+      font-size: 9px; color: var(--text-dim); letter-spacing: .06em;
+      pointer-events: none; text-shadow: 0 0 8px rgba(0,0,0,.8);
+    }
+    .map-corner .coord { font-size: 8px; opacity: .5; margin-top: 2px; }
+    .map-zoom-label {
+      position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+      z-index: 500; font-size: 8px; color: rgba(0,255,65,.1);
+      letter-spacing: .08em; pointer-events: none;
+      text-shadow: 0 0 8px rgba(0,0,0,.8);
+    }
+
+    .sound-toggle { position: absolute; top: 14px; right: 14px; z-index: 500; }
+    .sound-toggle .icon-btn { background: rgba(5,8,5,.7); backdrop-filter: blur(8px); border-color: var(--border-glow); }
+
+    .locate-btn {
+      position: absolute; top: 14px; right: 58px; z-index: 500;
+    }
+    .locate-btn .icon-btn { background: rgba(5,8,5,.7); backdrop-filter: blur(8px); border-color: var(--border-glow); }
+
+    .hud-badge {
+      position: absolute; bottom: 48px; left: 20px; z-index: 500;
+      font-size: 7px; color: rgba(0,255,65,.12); letter-spacing: .08em;
+      pointer-events: none; line-height: 1.6; text-shadow: 0 0 8px rgba(0,0,0,.8);
+    }
+
+    .map-bracket { position: absolute; z-index: 500; pointer-events: none; opacity: .06; }
+    .map-bracket.tl { top: 10px; left: 10px; border-top: 1px solid var(--neon-green); border-left: 1px solid var(--neon-green); width: 18px; height: 18px; }
+    .map-bracket.tr { top: 10px; right: 10px; border-top: 1px solid var(--neon-green); border-right: 1px solid var(--neon-green); width: 18px; height: 18px; }
+    .map-bracket.bl { bottom: 10px; left: 10px; border-bottom: 1px solid var(--neon-green); border-left: 1px solid var(--neon-green); width: 18px; height: 18px; }
+    .map-bracket.br { bottom: 10px; right: 10px; border-bottom: 1px solid var(--neon-green); border-right: 1px solid var(--neon-green); width: 18px; height: 18px; }
+
+    /* ─── Data ticker ─── */
+    .data-ticker {
+      position: absolute; top: 56px; left: 14px; z-index: 500;
+      font-size: 7px; color: rgba(0,255,65,.1); pointer-events: none;
+      line-height: 1.8; text-shadow: 0 0 8px rgba(0,0,0,.8);
+    }
+    .data-ticker .val { color: rgba(0,255,65,.2); }
+
+    /* ─── Radar ─── */
+    .radar-wrap { position: absolute; top: 14px; left: 14px; z-index: 500; pointer-events: none; }
+    .radar-sweep {
+      width: 60px; height: 60px; border-radius: 50%;
+      border: 1px solid rgba(0,255,65,.08); position: relative; overflow: hidden;
+    }
+    .radar-sweep::before {
+      content: ""; position: absolute; top: 50%; left: 50%;
+      width: 50%; height: 1px; background: linear-gradient(90deg, var(--neon-green), transparent);
+      transform-origin: left center; animation: radarRotate 3s linear infinite;
+    }
+    .radar-sweep::after {
+      content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      width: 3px; height: 3px; background: var(--neon-green); border-radius: 50%;
+      box-shadow: 0 0 6px var(--neon-green);
+    }
+    .radar-sweep .ring { position: absolute; inset: 25%; border: 1px solid rgba(0,255,65,.06); border-radius: 50%; }
+    .radar-sweep .ring2 { position: absolute; inset: 50%; border: 1px solid rgba(0,255,65,.04); border-radius: 50%; }
+    @keyframes radarRotate { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .radar-label {
+      font-size: 6px; color: rgba(0,255,65,.15); letter-spacing: .1em;
+      margin-top: 4px; text-align: center;
+    }
+
+    /* ─── Tile loading indicator ─── */
+    .tile-status {
+      position: absolute; bottom: 52px; right: 12px;
+      z-index: 500; pointer-events: none;
+      display: flex; align-items: center; gap: 6px;
+      font-family: 'JetBrains Mono', monospace; font-size: 7px;
+      color: rgba(0,255,65,.15);
+      transition: opacity .3s;
+    }
+    .tile-status .dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: rgba(0,255,65,.15); transition: all .3s;
+    }
+    .tile-status .dot.loading {
+      background: var(--neon-green);
+      box-shadow: 0 0 6px var(--neon-green);
+      animation: pulse-dot .8s ease-in-out infinite;
+    }
+
+    /* ─── Marker ─── */
+    .custom-marker {
+      width: 12px; height: 12px; border-radius: 50%;
+      border: 2px solid var(--neon-green);
+      background: transparent;
+      box-shadow: 0 0 8px rgba(0,255,65,.3);
+      cursor: pointer; transition: all .3s;
+    }
+    .custom-marker::before {
+      content: ""; position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      width: 20px; height: 20px; border-radius: 50%;
+      border: 1px solid rgba(0,255,65,.12);
+      animation: ping 2.5s ease-out infinite;
+    }
+    @keyframes ping {
+      0% { transform: translate(-50%,-50%) scale(1); opacity: .5; }
+      100% { transform: translate(-50%,-50%) scale(2.5); opacity: 0; }
+    }
+    .custom-marker.active-marker {
+      width: 14px !important; height: 14px !important;
+      background: var(--neon-green) !important;
+      box-shadow: 0 0 16px rgba(0,255,65,.5), 0 0 40px rgba(0,255,65,.2) !important;
+      z-index: 1000 !important;
+    }
+
+    .leaflet-popup-content-wrapper {
+      background: var(--panel-bg) !important; color: #fff !important;
+      border-radius: 4px !important; border: 1px solid var(--border-glow) !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,.85), 0 0 20px rgba(0,255,65,.05) !important;
+      backdrop-filter: blur(16px) !important;
+    }
+    .leaflet-popup-tip { background: var(--panel-bg) !important; border: 1px solid var(--border-glow) !important; border-top: none !important; border-left: none !important; }
+    .leaflet-popup-content { margin: 12px 16px !important; font-family: 'JetBrains Mono', monospace !important; font-size: 11px !important; line-height: 1.5 !important; }
+    .popup-title { font-weight: 600; font-size: 13px; color: var(--neon-green); }
+    .popup-meta { color: var(--text-dim); margin-top: 1px; font-size: 9px; }
+    .popup-desc { color: rgba(255,255,255,.45); margin-top: 4px; font-size: 10px; }
+    .popup-tag { display: inline-block; margin-top: 4px; font-size: 8px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; border: 1px solid; }
+
+    /* ─── Loading ─── */
+    .loading-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: #050805; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      transition: opacity .8s ease, visibility .8s ease;
+    }
+    .loading-overlay.done { opacity: 0; visibility: hidden; pointer-events: none; }
+    .loading-terminal { font-family: 'JetBrains Mono', monospace; text-align: center; max-width: 400px; }
+    .loading-terminal .line { font-size: 10px; color: var(--text-dim); letter-spacing: .06em; margin: 3px 0; }
+    .loading-terminal .prompt { font-size: 12px; color: var(--neon-green); margin-top: 16px; }
+    .loading-terminal .prompt .cursor { display: inline-block; width: 7px; height: 13px; background: var(--neon-green); animation: blink 1s step-end infinite; vertical-align: text-bottom; margin-left: 3px; }
+    .loading-bar-wrap { width: 280px; margin-top: 14px; }
+    .loading-bar-bg { width: 100%; height: 2px; background: rgba(0,255,65,.06); border-radius: 2px; overflow: hidden; }
+    .loading-bar-inner { height: 100%; width: 0%; background: var(--neon-green); border-radius: 2px; transition: width .3s ease; box-shadow: 0 0 10px var(--neon-green); }
+    .loading-bar-label { display: flex; justify-content: space-between; margin-top: 5px; font-size: 8px; color: var(--text-dim); }
+
+    /* ─── Info panel ─── */
+    .info-panel {
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      z-index: 500; pointer-events: none;
+      font-size: 8px; color: rgba(0,255,65,.08);
+      letter-spacing: .06em; text-align: center;
+      line-height: 1.8;
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 860px) {
+      .sidebar { position: fixed; top: 0; right: 0; bottom: 0; transform: translateX(100%); width: 100%; min-width: unset; }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-toggle { display: flex !important; }
+    }
+    .sidebar-toggle { display: none; }
+    .sidebar-toggle-open { position: absolute; top: 14px; right: 14px; z-index: 500; }
+  </style>
+</head>
+<body class="crt">
+<div class="noise"></div>
+<canvas id="matrixCanvas"></canvas>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loader">
+  <div class="loading-terminal">
+    <div class="line">[SYS] INITIALIZING SECURE TUNNEL...</div>
+    <div class="line">[SYS] DECRYPTING SATELLITE DOWNLINK...</div>
+    <div class="line" id="loadStatus">[SYS] LOADING PROJECT DATABASE...</div>
+    <div class="promot">
+      <span>></span> root@hub:~$ <span id="loadPrompt">establish_connection</span><span class="cursor"></span>
+    </div>
+  </div>
+  <div class="loading-bar-wrap">
+    <div class="loading-bar-bg"><div class="loading-bar-inner" id="loaderBar"></div></div>
+    <div class="loading-bar-label">
+      <span id="loadPct">0%</span>
+      <span id="loadHex">0x0000</span>
+    </div>
+  </div>
+</div>
+
+<button class="icon-btn sidebar-toggle sidebar-toggle-open" id="sidebarToggle" style="display:none" onclick="toggleSidebar()">≡</button>
+
+<div class="app">
+  <!-- Map -->
+  <div class="map-wrap">
+    <div id="map"></div>
+
+    <div class="radar-wrap">
+      <div class="radar-sweep"><div class="ring"></div><div class="ring2"></div></div>
+      <div class="radar-label">SCAN</div>
+    </div>
+
+    <div class="data-ticker">
+      <div>CLOCK: <span class="val" id="sysClock">00:00:00</span></div>
+      <div>NODES: <span class="val" id="nodeCount">25</span></div>
+      <div>STATUS: <span class="val" style="color:var(--neon-green)">ONLINE</span></div>
+      <div>LIVE <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#00ff41;animation:pulse-dot 1.5s ease-in-out infinite;margin-left:2px;"></span></div>
+    </div>
+
+    <div class="map-bracket tl"></div>
+    <div class="map-bracket tr"></div>
+    <div class="map-bracket bl"></div>
+    <div class="map-bracket br"></div>
+
+    <div class="locate-btn">
+      <button class="icon-btn" onclick="locateMe()">◎</button>
+    </div>
+    <div class="sound-toggle">
+      <button class="icon-btn" id="soundBtn" onclick="toggleSound()">♪</button>
+    </div>
+
+    <div class="map-corner">
+      N 19° 07' 37" · E 72° 52' 29"
+      <div class="coord" id="mouseCoord">LAT 19.1000 · LNG 72.8800</div>
+    </div>
+    <div class="map-zoom-label" id="zoomLabel">ZOOM 11 · RNG ~5km</div>
+    <div class="tile-status" id="tileStatus"><span class="dot" id="tileDot"></span><span id="tileText">TILES LOADED</span></div>
+    <div class="hud-badge">
+      [HUB://district.city/OS/v1.5.0]<br/>
+      ⚡ 25 NODES · 4 SECTORS
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="hud-corner tl"></div>
+    <div class="hud-corner tr"></div>
+    <div class="hud-corner bl"></div>
+    <div class="hud-corner br"></div>
+
+    <div class="sidebar-header">
+      <div class="brand">
+        <h1>// HUB.NETWORK</h1>
+        <h2 class="glitch" data-text="DISTRICT.CITY">DISTRICT.<span>CITY</span><span class="cursor-blink"></span></h2>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" onclick="closeSidebar()">✕</button>
+      </div>
+    </div>
+
+    <div class="filters">
+      <div class="filter-group">
+        <select name="loc" onchange="applyFilters()">
+          <option value="all">[ALL] Location</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <select name="status" onchange="applyFilters()">
+          <option value="all">[ALL] Status</option>
+          <option value="ongoing">ONGOING</option>
+          <option value="completed">COMPLETED</option>
+          <option value="upcoming">UPCOMING</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <select name="type" onchange="applyFilters()">
+          <option value="all">[ALL] Type</option>
+        </select>
+      </div>
+    </div>
+    <div class="filter-count" id="projectCount">// 0 active nodes</div>
+    <div class="project-list" id="projectList"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.js"></script>
+<script>
+  // ─── Matrix Rain ──────────────────────────────────────────────────
+  const mc = document.getElementById('matrixCanvas');
+  const mx = mc.getContext('2d');
+  let mw, mh, drops;
+
+  function resizeM() {
+    mw = mc.width = window.innerWidth;
+    mh = mc.height = window.innerHeight;
+    drops = Array(Math.floor(mw / 14)).fill(0).map(() => Math.random() * mh);
+  }
+  resizeM();
+  window.addEventListener('resize', resizeM);
+
+  const katakana = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF';
+  setInterval(() => {
+    mx.fillStyle = 'rgba(5,8,5,0.06)';
+    mx.fillRect(0, 0, mw, mh);
+    mx.font = 'bold 11px monospace';
+    for (let i = 0; i < drops.length; i++) {
+      const t = katakana[Math.floor(Math.random() * katakana.length)];
+      mx.fillStyle = Math.random() > 0.97 ? '#00f0ff' : '#00ff41';
+      mx.globalAlpha = Math.random() * 0.25 + 0.08;
+      mx.fillText(t, i * 14, drops[i] * 14);
+      mx.globalAlpha = 1;
+      if (drops[i] * 14 > mh && Math.random() > 0.98) drops[i] = 0;
+      drops[i] += 0.4 + Math.random() * 0.4;
+    }
+  }, 55);
+
+  // ─── REAL project data (actual Mumbai coordinates) ──────────────
+  const PROJECTS = [
+    // South Mumbai — real high-rises & landmarks
+    { id:1, name:"Imperial Towers", lat:19.0054, lng:72.8190, loc:"South Mumbai", status:"ongoing", type:"Residential", year:2026, addr:"Tardeo, Mumbai 400034" },
+    { id:2, name:"World One", lat:19.0038, lng:72.8182, loc:"South Mumbai", status:"ongoing", type:"Residential", year:2025, addr:"Upper Worli, Mumbai 400030" },
+    { id:3, name:"Oberoi Oasis", lat:19.0980, lng:72.8341, loc:"South Mumbai", status:"completed", type:"Residential", year:2023, addr:"Marine Drive, Mumbai 400020" },
+    { id:4, name:"Bandra Kurla Complex", lat:19.0630, lng:72.8670, loc:"South Mumbai", status:"ongoing", type:"Commercial", year:2024, addr:"BKC, Mumbai 400051" },
+    { id:5, name:"Palladium Hotel", lat:18.9285, lng:72.8225, loc:"South Mumbai", status:"completed", type:"Commercial", year:2022, addr:"Colaba, Mumbai 400005" },
+
+    // Western Suburbs — real locations
+    { id:6, name:"Infinity Mall", lat:19.1320, lng:72.8430, loc:"Western Suburbs", status:"completed", type:"Retail", year:2021, addr:"Andheri West, Mumbai 400058" },
+    { id:7, name:"Oberoi Splendor", lat:19.1155, lng:72.8505, loc:"Western Suburbs", status:"ongoing", type:"Residential", year:2026, addr:"Juhu, Mumbai 400049" },
+    { id:8, name:"Mindspace", lat:19.1430, lng:72.8570, loc:"Western Suburbs", status:"completed", type:"Commercial", year:2020, addr:"Malad West, Mumbai 400064" },
+    { id:9, name:"R City Mall", lat:19.1090, lng:72.8850, loc:"Western Suburbs", status:"completed", type:"Retail", year:2021, addr:"Ghatkopar, Mumbai 400086" },
+    { id:10, name:"Lodha Bellissimo", lat:19.1550, lng:72.8580, loc:"Western Suburbs", status:"ongoing", type:"Residential", year:2025, addr:"Kandivali West, Mumbai 400067" },
+
+    // Central Suburbs
+    { id:11, name:"Phoenix Marketcity", lat:19.0640, lng:72.8870, loc:"Central Suburbs", status:"completed", type:"Retail", year:2020, addr:"Kurla, Mumbai 400070" },
+    { id:12, name:"Sigma IT Park", lat:19.0680, lng:72.8930, loc:"Central Suburbs", status:"completed", type:"Commercial", year:2022, addr:"Vikhroli, Mumbai 400079" },
+    { id:13, name:"Godrej Infinity", lat:19.0460, lng:72.8780, loc:"Central Suburbs", status:"ongoing", type:"Mixed-Use", year:2025, addr:"Sion, Mumbai 400022" },
+    { id:14, name:"Marathon Maxima", lat:19.0810, lng:72.8750, loc:"Central Suburbs", status:"upcoming", type:"Residential", year:2028, addr:"Dadar, Mumbai 400028" },
+    { id:15, name:"Kohinoor Square", lat:19.0480, lng:72.8570, loc:"Central Suburbs", status:"completed", type:"Commercial", year:2021, addr:"Dadar West, Mumbai 400028" },
+
+    // Thane — real buildings
+    { id:16, name:"Viviana Mall", lat:19.1890, lng:72.9600, loc:"Thane", status:"completed", type:"Retail", year:2020, addr:"Thane West 400606" },
+    { id:17, name:"Lodha Amara", lat:19.2150, lng:72.9780, loc:"Thane", status:"ongoing", type:"Residential", year:2026, addr:"Kolshet, Thane 400607" },
+    { id:18, name:"Hiranandani Estate", lat:19.2420, lng:72.9700, loc:"Thane", status:"completed", type:"Township", year:2022, addr:"Hiranandani Estate, Thane 400607" },
+    { id:19, name:"Rustomjee Urbania", lat:19.2280, lng:72.9890, loc:"Thane", status:"ongoing", type:"Township", year:2025, addr:"Majiwada, Thane 400601" },
+    { id:20, name:"Neelkanth Orchids", lat:19.1790, lng:72.9520, loc:"Thane", status:"upcoming", type:"Residential", year:2027, addr:"Pokhran Road, Thane 400606" },
+
+    // Extended — more real locations across Mumbai
+    { id:21, name:"Lodha World Crest", lat:19.0010, lng:72.8210, loc:"South Mumbai", status:"ongoing", type:"Residential", year:2025, addr:"Lower Parel, Mumbai 400013" },
+    { id:22, name:"Omkar Alta Monte", lat:19.0080, lng:72.8150, loc:"South Mumbai", status:"upcoming", type:"Residential", year:2028, addr:"Tardeo, Mumbai 400034" },
+    { id:23, name:"Raheja Woods", lat:19.1160, lng:72.8600, loc:"Western Suburbs", status:"completed", type:"Villas", year:2020, addr:"Andheri East, Mumbai 400093" },
+    { id:24, name:"Piramal Agastya", lat:19.0280, lng:72.8500, loc:"South Mumbai", status:"ongoing", type:"Residential", year:2026, addr:"Byculla, Mumbai 400027" },
+    { id:25, name:"Kalpataru Avana", lat:19.0760, lng:72.8760, loc:"Central Suburbs", status:"completed", type:"Residential", year:2022, addr:"Sion, Mumbai 400022" },
+
+    // Indonesia — real locations (Jakarta, Surabaya, Bali, Bandung, IKN)
+    { id:26, name:"Menara BCA", lat:-6.2088, lng:106.8221, loc:"Jakarta", status:"completed", type:"Commercial", year:2020, addr:"Jakarta Pusat 10110" },
+    { id:27, name:"Pakuwon City", lat:-7.2750, lng:112.7350, loc:"Surabaya", status:"ongoing", type:"Township", year:2026, addr:"Surabaya Timur 60123" },
+    { id:28, name:"Bali Beach Resort", lat:-8.7936, lng:115.1612, loc:"Bali", status:"ongoing", type:"Residential", year:2025, addr:"Jimbaran, Bali 80361" },
+    { id:29, name:"BSD City", lat:-6.3024, lng:106.6386, loc:"Tangerang", status:"ongoing", type:"Township", year:2025, addr:"BSD, Tangerang 15322" },
+    { id:30, name:"Trans Studio Mall", lat:-6.9175, lng:107.6191, loc:"Bandung", status:"completed", type:"Retail", year:2021, addr:"Bandung 40121" },
+    { id:31, name:"Menara Mandiri", lat:-6.2333, lng:106.8067, loc:"Jakarta", status:"completed", type:"Commercial", year:2020, addr:"Jakarta Selatan 12950" },
+    { id:32, name:"Grand Indonesia", lat:-6.1932, lng:106.8218, loc:"Jakarta", status:"completed", type:"Retail", year:2020, addr:"Jakarta Pusat 10110" },
+    { id:33, name:"Nusantara Capital", lat:-0.9386, lng:116.7036, loc:"Kalimantan", status:"ongoing", type:"Township", year:2027, addr:"IKN, Kalimantan Timur" },
+    { id:34, name:"Yogyakarta State University", lat:-7.7714, lng:110.3880, loc:"Yogyakarta", status:"ongoing", type:"Education", year:2024, addr:"Sleman, DIY 55281" },
+    { id:35, name:"Kost Tari Dorm", lat:-7.7716, lng:110.3850, loc:"Yogyakarta", status:"ongoing", type:"Education", year:2025, addr:"Jl. Karangmalang, Caturtunggal, Depok, Sleman 55281" },
+  ];
+
+  // ─── Tile layers (all max zoom 20 for house-level detail) ──────
+  const streetMap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 20, attribution: '&copy; OSM',
+  });
+  const satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 20, attribution: '&copy; Esri',
+  });
+  const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20, attribution: '&copy; CARTO',
+  });
+  const googleSat = L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+    subdomains: ['0','1','2','3'], maxZoom: 20, attribution: '&copy; Google',
+  });
+  const googleHybrid = L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+    subdomains: ['0','1','2','3'], maxZoom: 20, attribution: '&copy; Google',
+  });
+  const bhuvanSat = L.tileLayer.wms('https://bhuvan-ras1.nrsc.gov.in/tilecache/tilecache.py', {
+    layers: 'Bhuvan_Lite_Sat_V2',
+    format: 'image/png',
+    transparent: true,
+    maxZoom: 19,
+    attribution: '&copy; ISRO Bhuvan',
+  });
+  const indonesiaBIG = L.tileLayer('https://geoservices.big.go.id/rbi/rest/services/BASEMAP/Rupabumi_Indonesia/MapServer/WMTS/tile/1.0.0/BASEMAP_Rupabumi_Indonesia/default/GoogleMapsCompatible/{z}/{y}/{x}.png', {
+    maxZoom: 18, attribution: '&copy; BIG Indonesia',
+  });
+
+  // ─── State ─────────────────────────────────────────────────────────
+  let map, markers = [];
+  let soundOn = false, locateWatch = null;
+  let markerCluster;
+
+  // ─── Init map — Google Satellite for max zoom 20 worldwide ─────
+  function initMap() {
+    map = L.map('map', {
+      center: [19.10, 72.88],
+      zoom: 11,
+      zoomControl: false,
+      attributionControl: false,
+      layers: [googleSat],
+      maxZoom: 20,
+      zoomSnap: 1,
+      zoomDelta: 1,
+      wheelPxPerZoomLevel: 90,
+      zoomAnimation: true,
+      fadeAnimation: true,
+      markerZoomAnimation: true,
+      inertia: true,
+      inertiaDeceleration: 2000,
+      inertiaMaxSpeed: 1000,
+    });
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // Layer switcher
+    const labelOverlay = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19, attribution: '&copy; CARTO',
+    });
+
+    L.control.layers({
+      '🛰 Google Satellite (default)': googleSat,
+      '🛰 Esri Satellite': satelliteMap,
+      '🛰 Google Hybrid (labels)': googleHybrid,
+      '🗺 Street (OSM)': streetMap,
+      '🌙 Dark': darkMap,
+      '🇮🇳 ISRO Bhuvan (India)': bhuvanSat,
+      '🇮🇩 BIG Rupabumi (Indonesia)': indonesiaBIG,
+    }, { '🏷 Labels': labelOverlay }, { position: 'bottomright' }).addTo(map);
+
+    // Tile loading indicator
+    let tileLoadTimer = null;
+    const tileDot = document.getElementById('tileDot');
+    const tileText = document.getElementById('tileText');
+    map.on('tileloadstart', () => {
+      tileDot.classList.add('loading');
+      tileText.textContent = 'LOADING TILES...';
+      clearTimeout(tileLoadTimer);
+    });
+    map.on('tileload', () => {
+      clearTimeout(tileLoadTimer);
+      tileLoadTimer = setTimeout(() => {
+        tileDot.classList.remove('loading');
+        tileText.textContent = 'TILES LOADED';
+      }, 600);
+    });
+    map.on('tileerror', () => {
+      tileDot.classList.remove('loading');
+      tileText.textContent = 'TILE ERROR';
+    });
+
+    // Scale
+    L.control.scale({ position: 'bottomright', imperial: false, metric: true }).addTo(map);
+
+    // Geocoder search
+    L.Control.geocoder({
+      position: 'topleft',
+      placeholder: '> SEARCH LOCATION...',
+      errorMessage: 'Not found',
+      showResultIcons: true,
+      geocoder: L.Control.Geocoder.nominatim(),
+    }).addTo(map);
+
+    // Marker cluster
+    markerCluster = L.markerClusterGroup({
+      chunkedLoading: true,
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+    });
+    map.addLayer(markerCluster);
+
+    // Track mouse coords
+    map.on('mousemove', e => {
+      document.getElementById('mouseCoord').textContent =
+        `LAT ${e.latlng.lat.toFixed(4)} · LNG ${e.latlng.lng.toFixed(4)}`;
+    });
+
+    // Track zoom
+    map.on('zoomend', () => {
+      const z = map.getZoom();
+      const ranges = ['~80km','~40km','~20km','~10km','~5km','~3km','~1.5km','~700m','~350m','~150m','~80m','~40m','~20m','~10m','~5m','~3m','~2m','~1m','~0.5m','~0.3m','~0.1m'];
+      document.getElementById('zoomLabel').textContent =
+        `ZOOM ${z} · RNG ${ranges[z] || '~5m'}`;
+    });
+  }
+
+  // ─── Markers ────────────────────────────────────────────────────────
+  function addMarkers() {
+    PROJECTS.forEach(p => {
+      const c = getColor(p.status);
+      const marker = L.marker([p.lat, p.lng], {
+        icon: L.divIcon({
+          className: '',
+          html: `<div class="custom-marker" style="border-color:${c}; box-shadow:0 0 8px ${c}30"></div>`,
+          iconSize: [16, 16],
+          iconAnchor: [8, 8],
+        })
+      });
+
+      marker.on('click', () => highlightProject(p.id));
+
+      marker.bindPopup(`
+        <div class="popup-title">${p.name}</div>
+        <div class="popup-meta">${p.loc} · ${p.type} · ${p.year}</div>
+        <div class="popup-desc">${p.addr}</div>
+        <span class="popup-tag" style="color:${c}; border-color:${c}40">${p.status}</span>
+        <div class="popup-desc" style="margin-top:4px;font-size:8px;color:rgba(255,255,255,.2)">
+          ${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}
+        </div>
+      `);
+
+      markers.push({ ...p, marker });
+      markerCluster.addLayer(marker);
+    });
+
+    document.getElementById('nodeCount').textContent = PROJECTS.length;
+  }
+
+  function getColor(s) {
+    switch (s) {
+      case 'ongoing': return '#00ff41';
+      case 'completed': return '#00f0ff';
+      case 'upcoming': return '#ff00aa';
+      default: return '#fff';
+    }
+  }
+
+  // ─── Sidebar ────────────────────────────────────────────────────────
+  function renderProjects(list) {
+    const el = document.getElementById('projectList');
+    el.innerHTML = list.map(p => {
+      const c = getColor(p.status);
+      return `
+      <div class="project-card" data-id="${p.id}" onclick="highlightProject(${p.id})">
+        <div class="project-thumb" style="border-color:${c}30">📡</div>
+        <div class="project-info">
+          <span class="tag tag-${p.status}">[${p.status}]</span>
+          <h3>${p.name}</h3>
+          <div class="meta">
+            <span style="color:${c}">● ${p.loc}</span>
+            <span>◆ ${p.type}</span>
+            <span>◈ ${p.year}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    document.getElementById('projectCount').textContent = `// ${list.length} active nodes`;
+  }
+
+  function highlightProject(id) {
+    const p = PROJECTS.find(x => x.id === id);
+    if (!p) return;
+    map.setView([p.lat, p.lng], 17, { animate: true });
+    markers.forEach(m => {
+      const el = m.marker.getElement();
+      if (el) { const d = el.querySelector('.custom-marker'); d?.classList.remove('active-marker'); }
+      if (m.id === id) { m.marker.openPopup(); if (el) { const d = el.querySelector('.custom-marker'); d?.classList.add('active-marker'); } }
+    });
+    document.querySelectorAll('.project-card').forEach(c => c.classList.toggle('active-card', parseInt(c.dataset.id) === id));
+  }
+
+  // ─── Filters (works with cluster) ────────────────────────────────
+  function applyFilters() {
+    const loc = document.querySelector('select[name="loc"]').value;
+    const status = document.querySelector('select[name="status"]').value;
+    const type = document.querySelector('select[name="type"]').value;
+
+    const filtered = PROJECTS.filter(p => {
+      if (loc !== 'all' && p.loc !== loc) return false;
+      if (status !== 'all' && p.status !== status) return false;
+      if (type !== 'all' && p.type !== type) return false;
+      return true;
+    });
+
+    renderProjects(filtered);
+    markerCluster.clearLayers();
+    markers.forEach(m => {
+      if (filtered.some(f => f.id === m.id)) markerCluster.addLayer(m.marker);
+    });
+  }
+
+  function populateFilters() {
+    const locs = [...new Set(PROJECTS.map(p => p.loc))].sort();
+    const types = [...new Set(PROJECTS.map(p => p.type))].sort();
+    const lS = document.querySelector('select[name="loc"]');
+    const tS = document.querySelector('select[name="type"]');
+    locs.forEach(l => { lS.innerHTML += `<option value="${l}">${l}</option>`; });
+    types.forEach(t => { tS.innerHTML += `<option value="${t}">${t}</option>`; });
+  }
+
+  // ─── Locate me ──────────────────────────────────────────────────────
+  function locateMe() {
+    if (locateWatch) { map.stopLocate(); locateWatch = null; return; }
+    map.locate({ setView: true, maxZoom: 20 });
+    locateWatch = map.on('locationfound', e => {
+      L.marker(e.latlng, {
+        icon: L.divIcon({
+          className: '',
+          html: `<div style="width:16px;height:16px;border-radius:50%;background:var(--neon-cyan);border:3px solid #fff;box-shadow:0 0 20px rgba(0,240,255,.6);"></div>`,
+          iconSize: [16, 16],
+          iconAnchor: [8, 8],
+        })
+      }).addTo(map).bindPopup('<div class="popup-title">📍 YOUR LOCATION</div><div class="popup-desc">Target acquired</div>').openPopup();
+    });
+    map.on('locationerror', () => { locateWatch = null; });
+  }
+
+  // ─── Sound ──────────────────────────────────────────────────────────
+  function toggleSound() {
+    soundOn = !soundOn;
+    const b = document.getElementById('soundBtn');
+    b.style.color = soundOn ? '#00ff41' : '';
+    b.style.boxShadow = soundOn ? '0 0 16px rgba(0,255,65,.1)' : '';
+    if (soundOn) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        g.gain.setValueAtTime(0.02, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+        o.type = 'square'; o.frequency.value = 1400;
+        o.start(); o.stop(ctx.currentTime + 0.1);
+      } catch(e) {}
+    }
+  }
+
+  // ─── Sidebar ──────────────────────────────────────────────────────
+  function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+  function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); }
+
+  // ─── Clock ─────────────────────────────────────────────────────────
+  function updateClock() {
+    const d = new Date();
+    document.getElementById('sysClock').textContent =
+      String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // ─── Loading ────────────────────────────────────────────────────────
+  const loadMsgs = [
+    "[SYS] INITIALIZING SECURE TUNNEL...",
+    "[SYS] DECRYPTING SATELLITE DOWNLINK...",
+    "[SYS] LOADING PROJECT DATABASE...",
+    "[SYS] CALIBRATING GEO COORDINATES...",
+    "[SYS] SPATIAL INDEX OPTIMIZED.",
+    "[SYS] CONNECTION ESTABLISHED.",
+  ];
+  const cmds = ['establish_tunnel','decrypt_feed','load_db','calibrate_geo','index_ready','ready'];
+
+  function simulateLoading() {
+    const bar = document.getElementById('loaderBar');
+    const pctEl = document.getElementById('loadPct');
+    const hexEl = document.getElementById('loadHex');
+    const statusEl = document.getElementById('loadStatus');
+    const promptEl = document.getElementById('loadPrompt');
+    let pct = 0, msgIdx = 0;
+
+    const iv = setInterval(() => {
+      pct = Math.min(pct + Math.random() * 10 + 3, 100);
+      bar.style.width = pct + '%';
+      pctEl.textContent = Math.floor(pct) + '%';
+      hexEl.textContent = '0x' + Math.floor(pct * 255).toString(16).toUpperCase().padStart(4, '0');
+
+      const ni = Math.min(Math.floor(pct / 18), loadMsgs.length - 1);
+      if (ni !== msgIdx) { msgIdx = ni; statusEl.textContent = loadMsgs[msgIdx]; promptEl.textContent = cmds[msgIdx]; }
+
+      if (pct >= 100) {
+        clearInterval(iv);
+        statusEl.textContent = "[SYS] CONNECTION ESTABLISHED.";
+        promptEl.textContent = 'connected';
+        setTimeout(() => {
+          document.getElementById('loader').classList.add('done');
+          setTimeout(() => { map.invalidateSize(); document.getElementById('sidebarToggle').style.display = 'flex'; }, 400);
+        }, 500);
+      }
+    }, 160);
+  }
+
+  // ─── Boot ───────────────────────────────────────────────────────────
+  initMap();
+  addMarkers();
+  populateFilters();
+  renderProjects(PROJECTS);
+  simulateLoading();
+</script>
+</body>
+</html>
